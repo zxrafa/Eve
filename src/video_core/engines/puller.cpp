@@ -76,7 +76,7 @@ void DrainBack() {
 // without draining the split, if nothing queued for the back may write the word (a release that
 // lowers it, a fence action) and no GPU work ever wrote its page (then no cache holds a newer word
 // than guest memory). It counts as a host sync for later GPU-written command lists, as the drain
-// did. Equal and mask acquires always drain. Ported from zortos293/Lichii#166 (e56b37fc0a), with
+// did. Equal and mask acquires always drain. Ported from zxrafa/Eve#166 (e56b37fc0a), with
 // the queued-writer check added.
 // A release still queued for the split's back meets the acquire: the back runs it before the
 // acquire's channel goes on, so the acquire needs no drain (GpuSplit::QueuedReleasePayload).
@@ -646,7 +646,7 @@ void Puller::ProcessSemaphoreTriggerMethod(DmaPusher& dma_pusher) {
         if (readable) {
             // The word is current (no queued or GPU write the front knows of can change it):
             // the value comes from the CPU or another channel later, and the polls in
-            // CanResumeAcquire pick it up without a drain (from zortos293/Lichii#231).
+            // CanResumeAcquire pick it up without a drain (from zxrafa/Eve#231).
             VideoCommon::Nx2Profile::Add(VideoCommon::Nx2Profile::Counter::AcquireNoDrain, 1);
         } else {
             DrainBack();
@@ -754,7 +754,7 @@ void Puller::ProcessSemaphoreExecute(DmaPusher& dma_pusher, u32 argument) {
             rasterizer->Query(address, VideoCommon::QueryType::Payload,
                               VideoCommon::QueryPropertiesFlags::IsAFence, payload, 0);
         });
-        // An acquire it meets while queued needs no drain (from zortos293/Lichii#179).
+        // An acquire it meets while queued needs no drain (from zxrafa/Eve#179).
         if (auto& split = VideoCommon::GpuSplit::Get(); split.Active()) {
             if (const auto device = dma_pusher.memory_manager.GpuToCpuAddress(address)) {
                 split.NoteRelease(*device, address, payload);
@@ -763,7 +763,7 @@ void Puller::ProcessSemaphoreExecute(DmaPusher& dma_pusher, u32 argument) {
         return;
     }
     // Acquires: the result only feeds the warning below, so with the split the pending fences are
-    // released in order on the back instead of after a drain (from zortos293/Lichii#179). Later
+    // released in order on the back instead of after a drain (from zxrafa/Eve#179). Later
     // GPU-written list fetches and macro reads still wait for the work before it (NoteSync).
     if (auto& split = VideoCommon::GpuSplit::Get(); split.Active()) {
         OnBack([rasterizer = dma_pusher.rasterizer] { rasterizer->ReleaseFences(); });

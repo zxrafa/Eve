@@ -40,11 +40,11 @@ class FakeSymbolizer:
 
     def resolve(self, rvas):
         self.asked |= set(rvas)
-        return {rva: self.names.get(rva, ["lichii.exe+%#x" % rva]) for rva in rvas}
+        return {rva: self.names.get(rva, ["eve.exe+%#x" % rva]) for rva in rvas}
 
 
 def file_bytes(end=True):
-    data = header() + module(BASE, 0x1000000, r"C:\lx\build\bin\lichii.exe") + \
+    data = header() + module(BASE, 0x1000000, r"C:\lx\build\bin\eve.exe") + \
         module(DLL, 0x10000, r"C:\Windows\System32\ntdll.dll") + thread(0, "GPUBack") + thread(1, "GPU")
     # GPUBack: CallMethod <- Run (twice), Draw <- Run (once, with Configure inlined into Draw)
     data += sample(0, [BASE + 0x100, BASE + 0x501])
@@ -85,7 +85,7 @@ class SampleReportTest(unittest.TestCase):
     def test_symbolizes_return_addresses_at_the_call(self):
         parsed = sample_report.parse(file_bytes())
         symbolizer = FakeSymbolizer(NAMES)
-        stacks = sample_report.symbolize_samples(parsed, "lichii.exe", symbolizer)
+        stacks = sample_report.symbolize_samples(parsed, "eve.exe", symbolizer)
         self.assertIn(0x500, symbolizer.asked)  # 0x501 - 1
         self.assertNotIn(0x501, symbolizer.asked)
         self.assertEqual(stacks[0], ("GPUBack", ["GpuSplit::Run", "Maxwell3D::CallMethod"]))
@@ -95,7 +95,7 @@ class SampleReportTest(unittest.TestCase):
 
     def test_summary(self):
         parsed = sample_report.parse(file_bytes())
-        stacks = sample_report.symbolize_samples(parsed, "lichii.exe", FakeSymbolizer(NAMES))
+        stacks = sample_report.symbolize_samples(parsed, "eve.exe", FakeSymbolizer(NAMES))
         threads = sample_report.summarize(stacks)
         back = threads["GPUBack"]
         self.assertEqual(back["total"], 3)
@@ -112,7 +112,7 @@ class SampleReportTest(unittest.TestCase):
     def test_folded_and_svg(self):
         parsed = sample_report.parse(file_bytes())
         threads = sample_report.summarize(
-            sample_report.symbolize_samples(parsed, "lichii.exe", FakeSymbolizer(NAMES)))
+            sample_report.symbolize_samples(parsed, "eve.exe", FakeSymbolizer(NAMES)))
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "folded.txt")
             sample_report.write_folded(threads, path)
@@ -126,7 +126,7 @@ class SampleReportTest(unittest.TestCase):
 
     def test_symbolizer_cache(self):
         with tempfile.TemporaryDirectory() as directory:
-            exe = os.path.join(directory, "lichii.exe")
+            exe = os.path.join(directory, "eve.exe")
             with open(exe, "wb") as file:
                 file.write(b"MZ")
             fake = os.path.join(directory, "fake-symbolizer")

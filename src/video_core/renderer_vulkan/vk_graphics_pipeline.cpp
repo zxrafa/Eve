@@ -1056,8 +1056,8 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
         if (has_tess_stages) {
             // The Vulkan spec requires patch list IA topology be used with tessellation
             // shader stages. Forcing it fixes a crash on some drivers
-            LOG_WARNING(Render_Vulkan,
-                        "Patch topology not used with tessellation, using patch list");
+            LOG_DEBUG(Render_Vulkan,
+                      "Patch topology not used with tessellation, using patch list");
             input_assembly_topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
         }
     }

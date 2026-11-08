@@ -268,7 +268,7 @@ size_t GenericEnvironment::ReadSizeBytes() const noexcept {
 
 bool GenericEnvironment::CanBeSerialized() const noexcept {
     // A trap guard is checked against live constants on every dispatch (ComputeShader), so a
-    // cached pipeline is only used once its guard passes (zortos293/Lichii#192, SinCuri0).
+    // cached pipeline is only used once its guard passes (zxrafa/Eve#192, SinCuri0).
     return !has_unbound_instructions;
 }
 
@@ -393,7 +393,10 @@ Tegra::Texture::TICEntry GenericEnvironment::ReadTextureInfo(GPUVAddr tic_addr, 
     const auto handle{Tegra::Texture::TexturePair(raw, via_header_index)};
     const u32 index{Tegra::Texture::TextureHeaderIndex(handle.first, tic_limit,
                                                        gpu_memory->UsesNativeTiling())};
-    ASSERT(index <= tic_limit);
+    if (index > tic_limit) {
+        LOG_DEBUG(HW_GPU, "Clamping out-of-bounds TIC index {} > tic_limit {}", index, tic_limit);
+        return Tegra::Texture::TICEntry{};
+    }
     const GPUVAddr descriptor_addr{tic_addr + index * sizeof(Tegra::Texture::TICEntry)};
     Tegra::Texture::TICEntry entry;
     gpu_memory->ReadBlock(descriptor_addr, &entry, sizeof(entry));

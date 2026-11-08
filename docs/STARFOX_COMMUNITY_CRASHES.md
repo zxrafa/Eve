@@ -1,6 +1,6 @@
 # Star Fox community crash investigation
 
-The reports use Lichii `2b139e9889`. The service fix is based on `nx2`
+The reports use Eve `2b139e9889`. The service fix is based on `nx2`
 `546cb67825b886898c974f2773e9426b62e6fdcc`. It fixes an incorrect IPC
 reply demonstrated in the RTX 4060 Ti panic. It is not a verified fix for
 the separate RTX 5090 Vulkan device loss.
@@ -98,7 +98,7 @@ not evidence that those accesses caused the later Vulkan device loss.
 
 The release already includes the ULDC and Star Fox visual fixes. Current
 nx2 additionally includes selected GPU fixes from upstream #475, #329 and
-#472 via Lichii #62, but none has been verified against this failure.
+#472 via Eve #62, but none has been verified against this failure.
 Retest current nx2 separately with the same game update and settings.
 Record visible behavior, reproduction steps, and the full log. If supported
 by the package, collect Nsight Aftermath output in a separate diagnostic

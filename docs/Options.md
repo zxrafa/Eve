@@ -59,14 +59,14 @@ These options control executables and build flavors.
   - Not supported on Linux
   - Automatically set if `YUZU_USE_BUNDLED_QT` is on for non-Linux
 - `ENABLE_UPDATE_CHECKER` (OFF) Enable update checking functionality
-  - `LICHII_BUILD_TAG` (empty) Published `build-N` tag. Builds without it never check for updates.
-  - `LICHII_BUILD_PLATFORM` (empty) Release asset platform and variant, such as `linux-x86_64-pgo`. CI sets this from its build matrix.
+  - `EVE_BUILD_TAG` (empty) Published `build-N` tag. Builds without it never check for updates.
+  - `EVE_BUILD_PLATFORM` (empty) Release asset platform and variant, such as `linux-x86_64-pgo`. CI sets this from its build matrix.
 - `YUZU_DISABLE_LLVM` (OFF) Do not attempt to link to the LLVM demangler
   - Really only useful for CI or distribution builds
 
 **Desktop only**:
 
-- `YUZU_CMD` (ON) Compile the SDL-based frontend (eden-cli)
+- `YUZU_CMD` (ON) Compile the SDL-based frontend (eve-cli)
 - `YUZU_ROOM` (OFF) Compile dedicated room functionality into the main executable
 - `YUZU_ROOM_STANDALONE` (OFF) Compile a separate executable for room functionality
 - `YUZU_STATIC_ROOM` (OFF) Compile the room executable *only* as a static, portable executable

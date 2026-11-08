@@ -37,7 +37,7 @@ std::vector<Asset> Release::GetPlatformAssets(std::string_view platform) const {
     const std::string host_url = "https://github.com";
     const auto path = fmt::format("/{}/releases/download/{}/", Common::g_build_auto_update_repo, tag);
     for (const auto extension : extensions) {
-        const auto filename = fmt::format("lichii-{}{}", platform, extension);
+        const auto filename = fmt::format("eve-{}{}", platform, extension);
         for (const auto& asset : assets) {
             if (asset == host_url + path + filename) {
                 return {{.name = platform.ends_with("-pgo") ? "PGO" : "Standard",
@@ -172,7 +172,7 @@ std::optional<std::string> MakeRequest(const std::string& url, const std::string
         httplib::Request request{
             .method = "GET",
             .path = path,
-            .headers = {{"Accept", "application/vnd.github+json"}, {"User-Agent", "Lichii"}},
+            .headers = {{"Accept", "application/vnd.github+json"}, {"User-Agent", "Eve"}},
         };
 
         client->set_follow_location(true);
@@ -205,7 +205,7 @@ std::vector<Release> GetReleases() {
     const auto body = GetReleasesBody();
 
     if (!body) {
-        LOG_WARNING(Common, "Failed to get Lichii releases");
+        LOG_WARNING(Common, "Failed to get Eve releases");
         return {};
     }
 

@@ -1200,14 +1200,29 @@ void BlitScale(Scheduler& scheduler, VkImage src_image, VkImage dst_image, const
 // textures went unbacked (garbage) and the game crashed. Use BC3 for this session.
 void UseBc3ForSwitch2OnSmallCards(const Device& device) {
     using namespace Common::Literals;
-    if (!Settings::CurrentProgramIsSwitch2() || device.IsOptimalAstcSupported() ||
-        Settings::GetAstcRecompression() != Settings::AstcRecompression::Uncompressed) {
+    if (!Settings::CurrentProgramIsSwitch2() || device.IsOptimalAstcSupported()) {
         return;
     }
     const u64 budget = device.GetDeviceMemoryBudget();
     const u64 memory = budget != 0 ? budget : device.GetDeviceLocalMemory();
     const char* keep = std::getenv("EDEN_NX2_KEEP_ASTC");
-    if (memory >= 20_GiB || (keep != nullptr && keep[0] == '1')) {
+    if (keep != nullptr && keep[0] == '1') {
+        return;
+    }
+    const char* force_bc3 = std::getenv("EDEN_NX2_FORCE_BC3");
+    if (memory < 6_GiB && (force_bc3 == nullptr || force_bc3[0] != '1')) {
+        if (Settings::GetAstcRecompression() != Settings::AstcRecompression::Bc1) {
+            LOG_WARNING(Render_Vulkan,
+                        "Switch 2 program with a {} MiB video memory budget (< 6 GiB): ASTC "
+                        "textures are re-compressed to BC1 (4 bpp) to avoid VRAM eviction "
+                        "thrashing. Set EDEN_NX2_FORCE_BC3=1 for BC3",
+                        memory >> 20);
+            Settings::SetAstcRecompressionOverride(Settings::AstcRecompression::Bc1);
+        }
+        return;
+    }
+    if (Settings::GetAstcRecompression() != Settings::AstcRecompression::Uncompressed ||
+        memory >= 20_GiB) {
         return;
     }
     LOG_WARNING(Render_Vulkan,

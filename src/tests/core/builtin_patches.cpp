@@ -162,6 +162,14 @@ TEST_CASE("Built-in Max Resolution patch is gated on build id and original word"
         Settings::values.disabled_addons[OcarinaTitleId] = {std::string{MaxResolution}};
         REQUIRE(PatchMain(context, OcarinaBuildId, TbzInstruction) == TbzInstruction);
     }
+
+    SECTION("Handheld mode keeps native dynamic resolution") {
+        const auto prev = Settings::values.use_docked_mode.GetValue();
+        Settings::values.use_docked_mode.SetValue(Settings::ConsoleMode::Handheld);
+        const u32 patched = PatchMain(context, OcarinaBuildId, TbzInstruction);
+        Settings::values.use_docked_mode.SetValue(prev);
+        REQUIRE(patched == TbzInstruction);
+    }
 }
 
 TEST_CASE("Built-in Max Resolution patch defers to a user mod at the same offset",

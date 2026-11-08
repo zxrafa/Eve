@@ -6,7 +6,7 @@ eight of them, representing 17,916 distinct stage/bytecode combinations. Three
 independent fixes remove lowering failures from 1,043 distinct bytecode programs.
 The other eight titles still need another asset reader or a guarded runtime capture.
 
-No game was launched for this sweep. The owner had `lichii.exe` running, so the
+No game was launched for this sweep. The owner had `eve.exe` running, so the
 approved no-GUI safety condition prevented fallback boots. All library access was
 read-only. Exported data, logs and builds stayed in separate scratch directories;
 no key files were needed or transferred.
@@ -17,9 +17,9 @@ The baseline compiler is nx2 `935c5bdb03`. The comparison adds only these change
 
 | Fix | Commit | Evidence |
 |---|---|---|
-| [Bananza BRA.U, #55](https://github.com/zortos293/Lichii/pull/55) | `ae4a50d6a780e40c06ac7a711fd70b4e55a91ac9` | All 814 original rejected fragment captures lower afterward. |
-| [Register-handle SULD/SUST, #57](https://github.com/zortos293/Lichii/pull/57) | `edf4b8342167d5a5b1f207b8963d9dd7c48c6658` | 80 of the initial 106 Duskbloods cases lower with this fix alone. |
-| [Uniform immediate-high-word shifts, #58](https://github.com/zortos293/Lichii/pull/58) | `c8b0b9a83bc621dd9eb9818a23760f697d461198` | One initial case lowers alone; the other 25 advance to the surface instructions. Both fixes together lower all 106. |
+| [Bananza BRA.U, #55](https://github.com/zxrafa/Eve/pull/55) | `ae4a50d6a780e40c06ac7a711fd70b4e55a91ac9` | All 814 original rejected fragment captures lower afterward. |
+| [Register-handle SULD/SUST, #57](https://github.com/zxrafa/Eve/pull/57) | `edf4b8342167d5a5b1f207b8963d9dd7c48c6658` | 80 of the initial 106 Duskbloods cases lower with this fix alone. |
+| [Uniform immediate-high-word shifts, #58](https://github.com/zxrafa/Eve/pull/58) | `c8b0b9a83bc621dd9eb9818a23760f697d461198` | One initial case lowers alone; the other 25 advance to the surface instructions. Both fixes together lower all 106. |
 
 The expanded corpus also exercises padded compute allocations. Across all retained
 control variants, native-lowering successes rise from **24,208 to 26,045**.
@@ -75,7 +75,7 @@ The remaining eight titles are inventory coverage, not shader passes:
 | Star Fox | `0400E88025B1A000` | Hash-named ZIP members have no supported shader-container prefix in the examined reads. The standard ZIP reader rejected 45,822 of 114,154 member-prefix reads on CRC checks; this is a reader limitation, not proof that the game dump is corrupt. |
 | Yoshi and the Mysterious Book demo | `04007C6028AA8000` | Unreal `.utoc`/`.ucas` I/O Store assets need a selective reader. |
 
-All four current NUPs were cataloged with Lichii's `NupContainer` and `RealVFS`.
+All four current NUPs were cataloged with Eve's `NupContainer` and `RealVFS`.
 Explicit export of 30 shader-named members from Bananza and Mario Kart World yields
 the same shader identities as their loose counterparts, so those are not counted
 twice. The empty `[0] NUPS` directory is not a title.

@@ -31,6 +31,7 @@
 #include "video_core/control/channel_state.h"
 #include "video_core/engines/kepler_compute.h"
 #include "video_core/engines/maxwell_3d.h"
+#include "video_core/engines/maxwell_dma.h"
 #include "video_core/gpu.h"
 #include "video_core/gpu_split.h"
 #include "video_core/guest_memory.h"
@@ -674,7 +675,10 @@ void DmaPusher::CallMethod(u32 argument) {
                                    (engine_type == Engines::EngineTypes::KeplerMemory ||
                                     engine_type == Engines::EngineTypes::Fermi2D);
         SCOPE_EXIT {
-            if (writer) {
+            if (split.Active() && engine_type == Engines::EngineTypes::MaxwellDMA) {
+                static_cast<Engines::MaxwellDMA*>(subchannel)
+                    ->FrontRecordMethod(split, dma_state.method, argument);
+            } else if (writer) {
                 split.NoteWriter();
             } else if (memory_writer) {
                 split.NoteUnrangedWriter();
@@ -743,7 +747,12 @@ void DmaPusher::CallMultiMethod(const u32* base_start, u32 num_methods) {
                                    (engine_type == Engines::EngineTypes::KeplerMemory ||
                                     engine_type == Engines::EngineTypes::Fermi2D);
         SCOPE_EXIT {
-            if (writer) {
+            if (split.Active() && engine_type == Engines::EngineTypes::MaxwellDMA) {
+                auto* const dma = static_cast<Engines::MaxwellDMA*>(subchannel);
+                for (u32 i = 0; i < num_methods; ++i) {
+                    dma->FrontRecordMethod(split, dma_state.method, base_start[i]);
+                }
+            } else if (writer) {
                 split.NoteWriter();
             } else if (memory_writer) {
                 split.NoteUnrangedWriter();

@@ -13,6 +13,7 @@
 #include "core/core.h"
 #include "video_core/engines/maxwell_3d.h"
 #include "video_core/engines/maxwell_dma.h"
+#include "video_core/gpu_split.h"
 #include "video_core/guest_memory.h"
 #include "video_core/memory_manager.h"
 #include "video_core/renderer_base.h"
@@ -60,6 +61,86 @@ void MaxwellDMA::CallMultiMethod(Core::System& system, u32 method, const u32* ba
     for (u32 i = 0; i < amount; ++i) {
         CallMethod(system, method, base_start[i], methods_pending - i <= 1);
     }
+}
+
+void MaxwellDMA::FrontRecordMethod(VideoCommon::GpuSplit& split, u32 method, u32 argument) {
+    if (method >= NUM_REGS) {
+        split.NoteWriter();
+        return;
+    }
+    front_regs.reg_array[method] = argument;
+    if (method != offsetof(Regs, launch_dma) / sizeof(u32)) {
+        return;
+    }
+    if (!split.FunctionsSettled()) {
+        split.NoteWriter();
+        return;
+    }
+    const LaunchDMA& launch = front_regs.launch_dma;
+    const GPUVAddr dst_gpu = front_regs.offset_out;
+    u64 dst_bytes = 0;
+    bool known_pitch = false;
+    if (!launch.multi_line_enable) {
+        if (launch.remap_enable != 0) {
+            if (front_regs.remap_const.dst_x == RemapConst::Swizzle::CONST_A) {
+                const u32 comp = front_regs.remap_const.component_size_minus_one + 1;
+                dst_bytes = u64{front_regs.line_length_in} * comp;
+                known_pitch = true;
+            }
+        } else if (IsPitchKind(memory_manager.GetPageKind(dst_gpu))) {
+            dst_bytes = front_regs.line_length_in;
+            known_pitch = true;
+        }
+    } else if (launch.dst_memory_layout == LaunchDMA::MemoryLayout::PITCH &&
+               launch.remap_enable == 0 && front_regs.pitch_out >= 0) {
+        dst_bytes = front_regs.line_count == 0
+                        ? 0
+                        : u64{front_regs.line_count - 1} * static_cast<u64>(front_regs.pitch_out) +
+                              front_regs.line_length_in;
+        known_pitch = true;
+    }
+    if (!known_pitch) {
+        split.NoteWriter();
+        return;
+    }
+    std::optional<DAddr> dst_dev;
+    if (dst_bytes != 0) {
+        if (dst_bytes > (64ULL << 20)) {
+            split.NoteWriter();
+            return;
+        }
+        dst_dev = memory_manager.GpuToCpuAddress(dst_gpu);
+        if (!dst_dev ||
+            memory_manager.GpuToCpuAddress(dst_gpu + dst_bytes - 1) != *dst_dev + dst_bytes - 1) {
+            split.NoteWriter();
+            return;
+        }
+        const u64 first_page = dst_gpu & ~u64{0xfff};
+        const u64 last_page = (dst_gpu + dst_bytes - 1) & ~u64{0xfff};
+        for (u64 page = first_page + 0x1000; page < last_page; page += 0x1000) {
+            if (memory_manager.GpuToCpuAddress(page) != *dst_dev + (page - dst_gpu)) {
+                split.NoteWriter();
+                return;
+            }
+        }
+    }
+    std::optional<DAddr> sem_dev;
+    if (launch.semaphore_type != LaunchDMA::SemaphoreType::NONE) {
+        const GPUVAddr sem_gpu = front_regs.semaphore.address;
+        sem_dev = memory_manager.GpuToCpuAddress(sem_gpu);
+        if (!sem_dev || memory_manager.GpuToCpuAddress(sem_gpu + 15) != *sem_dev + 15) {
+            split.NoteWriter();
+            return;
+        }
+    }
+    split.NoteMemoryWriter();
+    if (dst_dev && dst_bytes != 0) {
+        split.NoteMemoryWrite(*dst_dev, dst_bytes, "maxwell_dma");
+    }
+    if (sem_dev) {
+        split.NoteMemoryWrite(*sem_dev, 16, "maxwell_dma_sem");
+    }
+    split.NoteRangedCopyWriter();
 }
 
 void MaxwellDMA::Launch() {

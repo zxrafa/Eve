@@ -8,6 +8,7 @@
 #include <span>
 #include <array>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 
 #include "common/assert.h"
@@ -534,6 +535,17 @@ std::vector<u8> PatchManager::PatchNSO(const std::vector<u8>& nso, const std::st
         if (std::find(disabled.cbegin(), disabled.cend(), patch.name) != disabled.cend()) {
             LOG_INFO(Loader, "    - Skipping \"{}\": disabled in Add-Ons", patch.name);
             continue;
+        }
+        if (patch.name == "Max Resolution (built-in)") {
+            const char* force_max = std::getenv("EDEN_NX2_OOT_MAX_RES");
+            const char* force_dyn = std::getenv("EDEN_NX2_OOT_DYNAMIC_RES");
+            if ((force_dyn != nullptr && force_dyn[0] == '1') ||
+                (!Settings::IsDockedMode() && (force_max == nullptr || force_max[0] != '1'))) {
+                LOG_INFO(Loader,
+                         "    - Skipping \"{}\": keeping native dynamic resolution controller",
+                         patch.name);
+                continue;
+            }
         }
         if (patch.build_id != build_id) {
             LOG_INFO(Loader, "    - Skipping \"{}\": build id {} is not {}", patch.name, build_id,

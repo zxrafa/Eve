@@ -14,23 +14,23 @@ namespace {
 Common::Net::Release MakeRelease(std::string tag, std::string filename) {
     const nlohmann::json json{
         {"tag_name", tag},
-        {"name", "Lichii nx2 " + tag},
+        {"name", "Eve nx2 " + tag},
         {"prerelease", true},
         {"assets",
          {{{"browser_download_url",
-            "https://github.com/zortos293/Lichii/releases/download/" + tag + "/" + filename}}}},
+            "https://github.com/zxrafa/Eve/releases/download/" + tag + "/" + filename}}}},
     };
-    return Common::Net::Release::FromJson(json, "https://api.github.com", "zortos293/Lichii")
+    return Common::Net::Release::FromJson(json, "https://api.github.com", "zxrafa/Eve")
         .value();
 }
 
 } // namespace
 
-TEST_CASE("Lichii updates compare build numbers, not tag strings", "[updater]") {
+TEST_CASE("Eve updates compare build numbers, not tag strings", "[updater]") {
     const auto releases = std::array{
-        MakeRelease("build-9", "lichii-windows-x86_64.zip"),
-        MakeRelease("build-100", "lichii-windows-x86_64.zip"),
-        MakeRelease("build-99", "lichii-windows-x86_64.zip"),
+        MakeRelease("build-9", "eve-windows-x86_64.zip"),
+        MakeRelease("build-100", "eve-windows-x86_64.zip"),
+        MakeRelease("build-99", "eve-windows-x86_64.zip"),
     };
     const auto update = UpdateChecker::SelectUpdate(releases, "build-70", "windows-x86_64");
     REQUIRE(update);
@@ -40,20 +40,20 @@ TEST_CASE("Lichii updates compare build numbers, not tag strings", "[updater]") 
     CHECK_FALSE(UpdateChecker::SelectUpdate({}, "build-70", "windows-x86_64"));
 }
 
-TEST_CASE("Lichii ignores dev builds and malformed release tags", "[updater]") {
+TEST_CASE("Eve ignores dev builds and malformed release tags", "[updater]") {
     const std::string tag =
         GENERATE("", "nx2", "v0.2.0", "abc123-nx2", "nx2-build-71", "build-", "build-0", "build--1",
                  "build-+71", "build-71junk", "build- 71", "build-18446744073709551616");
-    const auto releases = std::array{MakeRelease("build-71", "lichii-windows-x86_64.zip")};
+    const auto releases = std::array{MakeRelease("build-71", "eve-windows-x86_64.zip")};
     CHECK_FALSE(UpdateChecker::SelectUpdate(releases, tag, "windows-x86_64"));
     auto invalid = releases;
     invalid[0].tag = tag;
-    invalid[0].assets = {"https://github.com/zortos293/Lichii/releases/download/" + tag +
-                         "/lichii-windows-x86_64.zip"};
+    invalid[0].assets = {"https://github.com/zxrafa/Eve/releases/download/" + tag +
+                         "/eve-windows-x86_64.zip"};
     CHECK_FALSE(UpdateChecker::SelectUpdate(invalid, "build-70", "windows-x86_64"));
 }
 
-TEST_CASE("Lichii selects only the matching platform and PGO variant", "[updater]") {
+TEST_CASE("Eve selects only the matching platform and PGO variant", "[updater]") {
     const std::string platform =
         GENERATE("windows-x86_64", "windows-x86_64-pgo", "linux-x86_64", "linux-x86_64-pgo",
                  "linux-aarch64", "linux-aarch64-pgo", "macos-arm64");
@@ -64,43 +64,43 @@ TEST_CASE("Lichii selects only the matching platform and PGO variant", "[updater
           "macos-arm64.zip", "linux-x86_64.AppImage", "linux-x86_64-pgo.AppImage",
           "linux-aarch64.AppImage", "linux-aarch64-pgo.AppImage"}) {
         release.assets.push_back(
-            "https://github.com/zortos293/Lichii/releases/download/build-71/lichii-" +
+            "https://github.com/zxrafa/Eve/releases/download/build-71/eve-" +
             std::string{name});
     }
     const auto selected = release.GetPlatformAssets(platform);
     REQUIRE(selected.size() == 1);
     CHECK(selected[0].filename ==
-          "lichii-" + platform + (platform.starts_with("linux-") ? ".AppImage" : ".zip"));
+          "eve-" + platform + (platform.starts_with("linux-") ? ".AppImage" : ".zip"));
     CHECK(selected[0].url == "https://github.com");
     CHECK(selected[0].path ==
-          "/zortos293/Lichii/releases/download/build-71/" + selected[0].filename);
+          "/zxrafa/Eve/releases/download/build-71/" + selected[0].filename);
     CHECK_FALSE(release.GetPlatformAssets("android-arm64").size());
     CHECK_FALSE(release.GetPlatformAssets("").size());
 }
 
-TEST_CASE("Lichii skips releases without its asset and falls back to Linux archives", "[updater]") {
+TEST_CASE("Eve skips releases without its asset and falls back to Linux archives", "[updater]") {
     const auto releases = std::array{
-        MakeRelease("build-73", "lichii-linux-x86_64.AppImage"),
-        MakeRelease("build-71", "lichii-linux-x86_64-pgo.tar.gz"),
-        MakeRelease("build-72", "lichii-linux-aarch64-pgo.AppImage"),
+        MakeRelease("build-73", "eve-linux-x86_64.AppImage"),
+        MakeRelease("build-71", "eve-linux-x86_64-pgo.tar.gz"),
+        MakeRelease("build-72", "eve-linux-aarch64-pgo.AppImage"),
     };
     const auto update = UpdateChecker::SelectUpdate(releases, "build-70", "linux-x86_64-pgo");
     REQUIRE(update);
     CHECK(update->tag == "build-71");
     CHECK(update->GetPlatformAssets("linux-x86_64-pgo")[0].filename ==
-          "lichii-linux-x86_64-pgo.tar.gz");
+          "eve-linux-x86_64-pgo.tar.gz");
     CHECK_FALSE(UpdateChecker::SelectUpdate(releases, "build-70", "windows-x86_64"));
 }
 
-TEST_CASE("Lichii does not select Eden or lookalike download URLs", "[updater]") {
+TEST_CASE("Eve does not select Eden or lookalike download URLs", "[updater]") {
     const std::string url = GENERATE(
-        "https://github.com/eden-emu/eden/releases/download/build-71/lichii-windows-x86_64.zip",
-        "https://github.com/zortos293/Lichii/releases/download/build-70/lichii-windows-x86_64.zip",
-        "https://github.com/zortos293/Lichii/releases/download/build-71/"
-        "not-lichii-windows-x86_64.zip",
-        "https://github.com.example.com/zortos293/Lichii/releases/download/build-71/"
-        "lichii-windows-x86_64.zip");
-    auto release = MakeRelease("build-71", "lichii-windows-x86_64.zip");
+        "https://github.com/eden-emu/eden/releases/download/build-71/eve-windows-x86_64.zip",
+        "https://github.com/zxrafa/Eve/releases/download/build-70/eve-windows-x86_64.zip",
+        "https://github.com/zxrafa/Eve/releases/download/build-71/"
+        "not-eve-windows-x86_64.zip",
+        "https://github.com.example.com/zxrafa/Eve/releases/download/build-71/"
+        "eve-windows-x86_64.zip");
+    auto release = MakeRelease("build-71", "eve-windows-x86_64.zip");
     release.assets = {url};
     CHECK(release.GetPlatformAssets("windows-x86_64").empty());
 }
@@ -110,18 +110,18 @@ TEST_CASE("GitHub failures and invalid JSON produce no releases", "[updater]") {
         GENERATE("", "not JSON", R"({"message":"API rate limit exceeded"})", "null", "[]",
                  R"([{"tag_name":42}])", R"([{"tag_name":"build-71","assets":null}])",
                  R"([{"tag_name":"build-71","draft":true}])");
-    CHECK(Common::Net::Release::ListFromJson(json, "https://api.github.com", "zortos293/Lichii")
+    CHECK(Common::Net::Release::ListFromJson(json, "https://api.github.com", "zxrafa/Eve")
               .empty());
 }
 
 TEST_CASE("GitHub optional fields can be null or missing", "[updater]") {
     const std::string_view json = R"([{"tag_name":"build-71","name":null,"body":null}])";
     const auto releases =
-        Common::Net::Release::ListFromJson(json, "https://api.github.com", "zortos293/Lichii");
+        Common::Net::Release::ListFromJson(json, "https://api.github.com", "zxrafa/Eve");
     REQUIRE(releases.size() == 1);
     CHECK(releases[0].title == "build-71");
     CHECK(releases[0].assets.empty());
-    CHECK(releases[0].html_url == "https://github.com/zortos293/Lichii/releases/tag/build-71");
+    CHECK(releases[0].html_url == "https://github.com/zxrafa/Eve/releases/tag/build-71");
 }
 
 TEST_CASE("Release requests handle HTTP failures without throwing", "[updater]") {
@@ -129,7 +129,7 @@ TEST_CASE("Release requests handle HTTP failures without throwing", "[updater]")
     httplib::Server server;
     server.Get("/releases", [status](const httplib::Request& request, httplib::Response& response) {
         response.status =
-            request.get_header_value("User-Agent") == "Lichii" &&
+            request.get_header_value("User-Agent") == "Eve" &&
                     request.get_header_value("Accept") == "application/vnd.github+json"
                 ? status
                 : 400;

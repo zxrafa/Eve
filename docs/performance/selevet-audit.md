@@ -1,10 +1,10 @@
 # Selevet performance audit
 
-Audited November 5, 2026 against Lichii `30d6061f5b280262286b324e5aab2675a3f26f5e`,
+Audited November 5, 2026 against Eve `30d6061f5b280262286b324e5aab2675a3f26f5e`,
 Eglantine `e736dfde9e45bc3640935e373927814883803d95`, and Selevet
 `c3aa97d952b768e8798872d74c21094a340041ff`.
 
-Most useful Selevet optimizations already exist in Lichii. This branch ports the
+Most useful Selevet optimizations already exist in Eve. This branch ports the
 usage-tracker reset guard and adapts TAS input-change suppression. Skipping command dependencies,
 native draws, or requested presentation intervals is not a correctness-preserving
 optimization. This audit does not attribute the owner's private-build gains to
@@ -13,9 +13,9 @@ any particular public change, and makes no measured game-FPS claim.
 ## Provenance
 
 The public fork has **no merge base** with either nx2 branch, even with full git
-history. Its root `c4137dc795` is a source snapshot of Lichii's earlier
+history. Its root `c4137dc795` is a source snapshot of Eve's earlier
 `badc91ebce6b6cb44eabe67f7aa0dbbc6abd9e46`. That earlier commit is an ancestor of
-current Lichii. The fork's later upstream imports are ordinary single-parent
+current Eve. The fork's later upstream imports are ordinary single-parent
 commits, not git merges:
 
 | Selevet commit | Source or purpose |
@@ -26,7 +26,7 @@ commits, not git merges:
 | `e8d94946c1`, `64685fe34a` | Present-rate override and x86-64-v3 build target |
 | `53c39dfed6` | Squashed Eglantine build-104 import plus sparse-remap policy |
 | `d8c95fef47` | Performance build 1: submits, acquires, bitmap scans, usage reset, TAS and host tuning |
-| `e902aca643` | Existing Lichii AVX-512 CLZ fix |
+| `e902aca643` | Existing Eve AVX-512 CLZ fix |
 | `bce3c83739` | Performance build 2: download batching, queued acquires, polls and experiments |
 | `59a1b82e04` | Performance build 3: AVX-512 suppression, DKB upscale/EOS changes |
 | `8b076b167f` | Performance build 4: VRR patch, native draw skipping and diagnostics |
@@ -50,8 +50,8 @@ git diff --ignore-space-at-eol build-163 selevet/main
 ```
 
 The two merge-base commands return no commit. Neither whole-tree comparison is
-itself a list of Selevet inventions: both include inherited Lichii work and older
-upstream implementations. Upstream nx2 is already contained in the audited Lichii
+itself a list of Selevet inventions: both include inherited Eve work and older
+upstream implementations. Upstream nx2 is already contained in the audited Eve
 base. Relevant PR/issue surveys and actual patches included upstream #593, #609,
 #576, command-copy, deferred-instance, sparse-map, Mii and six-axis work. After
 the GitHub API rate limit, PR heads were fetched with git rather than treating
@@ -59,15 +59,15 @@ failed API responses as empty diffs.
 
 ## Change decisions
 
-“Existing” means present in the audited Lichii nx2 unless a different branch is
+“Existing” means present in the audited Eve nx2 unless a different branch is
 named. “No” in the port column includes experiments deliberately not added.
 Performance descriptions are expected mechanisms, not benchmark results.
 
 ### Mapping, caches and scheduling
 
-| Change | Selevet commit | In Lichii already? | Correct? | Ported here? | Expected impact and risk |
+| Change | Selevet commit | In Eve already? | Correct? | Ported here? | Expected impact and risk |
 |---|---|---|---|---|---|
-| Compare only the changed mapping-table window | `c4137dc795` | Historical class is absent; current registry has no whole-table difference calculation | Historical equivalence passed | Test only | Reduces old comparison work; still scans leases and trims mappings. No current-Lichii speedup without replacing its different mapping model. |
+| Compare only the changed mapping-table window | `c4137dc795` | Historical class is absent; current registry has no whole-table difference calculation | Historical equivalence passed | Test only | Reduces old comparison work; still scans leases and trims mappings. No current-Eve speedup without replacing its different mapping model. |
 | Use the active draw count, zero for unknown indirect counts | `c4137dc795` | Yes, `226162edf5` | Yes | No duplicate | Avoids stale unused vertex/index counts. Current native draws additionally cannot be discarded. |
 | Skip reset of an unchanged usage tracker | `d8c95fef47` | No | Yes, with reset/track invariants tested | Yes | Avoids clearing idle buffers' bitmaps and recent-range caches each frame. Small CPU saving, no dependency changes. |
 | Skip empty SlotVector bitmap words | `d8c95fef47` | Yes, `00285925fa` | Increment is sound; fork retains a separate broken `begin()` distance | No duplicate | Current implementation also handles an empty first word correctly. Whole-header replacement would regress it. |
@@ -97,14 +97,14 @@ the stale 1 without observing the logically earlier write.
 
 ### Shaders, games, video and presentation
 
-| Change | Selevet commit | In Lichii already? | Correct? | Ported here? | Expected impact and risk |
+| Change | Selevet commit | In Eve already? | Correct? | Ported here? | Expected impact and risk |
 |---|---|---|---|---|---|
 | Second build-131 translator on lowering failure | `c3aa97d952` | Unified current lowerer instead | Not safe as-is | No | Duplicates 2,896 lines of old upstream code, bypasses later rejection checks, and aliases distinct Instruction types with reinterpret_cast. Acceptance is not correctness. |
 | F2I.FTZ.U64.TRUNC, TXQ.B/masks/multiple results, CSMTEST, subword local access | `c3aa97d952` | Yes; upstream imports and integrated local-memory support | Current equivalents retained | No duplicate | Shader coverage rather than a general speedup. Current validation is stronger. |
 | Local GPR+uniform addresses and STL | `c3aa97d952` | Yes, `f6a8f51324` | Current version preserves address/value limits and scratch dependencies | No duplicate | Replacing it with the old lowerer risks corrupting multiword spill addresses. |
 | Immediate SHF.U64.HI below 32 | `c3aa97d952` | Current lowering supports wider forms | No useful new coverage | No duplicate | Fork also admits a U64 form into an older right-shift shortcut. |
 | UPOPC and task/mesh ISBERD/ISBEWR plumbing | `114b5b06bd` | Yes; build-131 imports and later repairs | Existing newer implementation retained | No duplicate | Current code includes later shadow-register fixes, including `b328477840`. |
-| F2I cbuf abs/neg modifiers | `114b5b06bd` | Partial in nx2; broader fix on `origin/fix/oot-fog`, `1ad14bebb8` | Candidate already under separate Lichii work | No duplicate branch work | Review/test that existing hunk, not the fork's older translator. Correctness benefit, not established CPU gain. |
+| F2I cbuf abs/neg modifiers | `114b5b06bd` | Partial in nx2; broader fix on `origin/fix/oot-fog`, `1ad14bebb8` | Candidate already under separate Eve work | No duplicate branch work | Review/test that existing hunk, not the fork's older translator. Correctness benefit, not established CPU gain. |
 | Predicated CALL.NOINC/BRA loop exit to BSYNC despite other RETs | `114b5b06bd` | Current forward-transfer/linkage handling covers it | Current implementation retained | No duplicate | No missing capability established. |
 | Zero whole bank-17 loads used by integer add/subtract | `c3aa97d952` | Narrower Kirby fix, `0aabd552a2` | Fork heuristic is too broad | No | Zeroes unrelated uses, offsets and stages. Current code rewrites only proven native fragment dither-bias uses. |
 | DKB fallback upscale pairs at cbuf0 +0x60/+0x70 | `59a1b82e04` | Native tensor lowering and identified DLSS contracts replace old fallback | Not safe globally | No | Plausible image dimensions do not prove an upscaler; can overwrite unrelated outputs. |
@@ -121,11 +121,11 @@ the stale 1 without observing the logically earlier write.
 
 ### Host policy, inputs and build choices
 
-| Change | Selevet commit | In Lichii already? | Correct? | Ported here? | Expected impact and risk |
+| Change | Selevet commit | In Eve already? | Correct? | Ported here? | Expected impact and risk |
 |---|---|---|---|---|---|
 | Retry deferred Windows guest commits up to about ten seconds | `c3aa97d952` | Current allocator commits backing upfront | Not transplantable alone | No | Retries all errors and cannot cancel; may recover transient commit pressure but stalls the caller. Requires the older deferred-access contract and Windows exhaustion testing. |
 | Reinitialize on any memory-layout enum change | `bce3c83739` | Yes, `d5b2582104` from upstream PR #472 | Yes | No duplicate | Prevents incorrect backing-size reuse, not a steady-state FPS improvement. |
-| AVX-512 CLZ narrows all eight lanes | `e902aca643` | Yes, Lichii `9c34939757` / `8cd5c6a44b` | Yes | No duplicate | Copied from Lichii originally. No effect on the owner's AVX2-only Ryzen 5900X. |
+| AVX-512 CLZ narrows all eight lanes | `e902aca643` | Yes, Eve `9c34939757` / `8cd5c6a44b` | Yes | No duplicate | Copied from Eve originally. No effect on the owner's AVX2-only Ryzen 5900X. |
 | Disable all AVX-512 JIT paths by default | `59a1b82e04` | No | Unproven broad workaround | No | CPU-dependent frequency/throughput tradeoff; diagnose specific emitters rather than disable an ISA family globally. |
 | Scan and evict apparently zero Windows mapped pages | `d8c95fef47` | No | Unsuitable general policy | No | Reads whole 1-MiB chunks when any page is resident, potentially faulting pages in. Detached worker has no lifecycle and can outlive logging/game shutdown. |
 | Default Windows process high priority | `d8c95fef47` | No; selected worker priority already exists | Host scheduling tradeoff | No | Raises UI/compiler/background work too; may starve competing work without reducing emulator work. |
@@ -140,7 +140,7 @@ the stale 1 without observing the logically earlier write.
 
 ### Diagnostics and import-only changes
 
-| Change | Selevet commit | In Lichii already? | Correctness / impact | Ported here? |
+| Change | Selevet commit | In Eve already? | Correctness / impact | Ported here? |
 |---|---|---|---|---|
 | Pipeline worker-wait aggregation | `c4137dc795` | No exact counter; related pipeline profiling exists | Diagnostic only, clocks/logs under build mutex; assumes one worker | No |
 | Per-drain-site timings | `d8c95fef47` | Yes, newer per-thread implementation | Fork's optional timer emplacement destroys a temporary and later its copy, double-counting waits | No duplicate |
@@ -154,7 +154,7 @@ the stale 1 without observing the logically earlier write.
 | SVC per-thread ring dumped on Break | `c3aa97d952` | Different SVC tracing exists | Process-global mutex, unbounded static thread map, cross-process handle ambiguity and edits to generated source | No |
 | ClearEvent wrong-type warning | `c3aa97d952` | Arguments/results visible through SVC tracing | Low-risk diagnostic but ungated/unlimited, no speed or behavior fix | No |
 | Graphics-pool allocation free-space diagnostic | `114b5b06bd` | Simpler allocation-error log exists | Failure-path diagnostic, no allocation or performance change | No |
-| Missing audio-out sources and removed release workflow | `c4137dc795` | Lichii retains them | Snapshot omissions, not optimizations; fork CMake still names the missing audio sources | No |
+| Missing audio-out sources and removed release workflow | `c4137dc795` | Eve retains them | Snapshot omissions, not optimizations; fork CMake still names the missing audio sources | No |
 | Icon/README/package switch files, CRLF and executable-mode changes | Multiple | Branding/build packaging differs | Not runtime optimizations; shipped unsafe switches change comparisons materially | No |
 
 Build-104/build-131 imports already cover sparse tile backing, task/mesh support,
@@ -166,12 +166,12 @@ The duplicated written-page mark and fork-specific reconciliation policies are
 listed separately above.
 
 The `Written` sparse-block state transitions in `53c39dfed6` adapt build-104's
-`4d6a13e3d9` code to an inherited Lichii enum. After normalizing those enum names,
+`4d6a13e3d9` code to an inherited Eve enum. After normalizing those enum names,
 the tile lifecycle functions match that upstream implementation; current nx2 also
 has newer overflow-safe request bounds. Inherited generation-checked pending-block
-tokens are separate older Lichii work, not a new Selevet optimization.
+tokens are separate older Eve work, not a new Selevet optimization.
 
-Older Lichii work retained in the snapshot but absent or changed in current nx2
+Older Eve work retained in the snapshot but absent or changed in current nx2
 includes deferred Windows backing, idempotent Windows cleanup, JIT commit-failure
 checks, and bounds-checked direct NSO decompression. These originate in
 `60ef6d2750`/`badc91ebce`, not Selevet. Restoring them requires separate scoped
@@ -214,7 +214,7 @@ remove. Adding the old optimized class alone would create unused code.
 
 ## Release workflow recommendation
 
-Train a new PGO profile with Lichii's release compiler/ABI and representative
+Train a new PGO profile with Eve's release compiler/ABI and representative
 games, cold/warm shader states and gameplay paths. Record profile coverage and
 staleness instead of hiding the warnings as the fork's cache files do. Its bundled
 profile predates later source edits and was trained on one game's workload; do
@@ -322,5 +322,5 @@ sanitized byte-range test. Existing conservative false positives in same-page
 usage queries remain; they can prevent reordering, not permit unsafe reordering.
 
 Windows pagefile recovery, NVIDIA optical flow and the private
-`b8d34f6ee4-selevet-perf5-lichii67` binary are not available in this public-source
+`b8d34f6ee4-selevet-perf5-eve67` binary are not available in this public-source
 audit. No emulator/game session was started or stopped.

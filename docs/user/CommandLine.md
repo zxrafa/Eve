@@ -1,8 +1,8 @@
 # User Handbook - Command Line
 
-There are two main applications, an SDL-based app (`eden-cli`) and a Qt based app (`eden`); both accept the same command line arguments.
+There are two main applications, an SDL-based app (`eve-cli`) and a Qt based app (`eden`); both accept the same command line arguments.
 
-- `./eden <path>`: Running with a single argument and nothing else, will make the emulator look for the given file and load it, this behavior is similar to `eden-cli`; allows dragging and dropping games into the application.
+- `./eden <path>`: Running with a single argument and nothing else, will make the emulator look for the given file and load it, this behavior is similar to `eve-cli`; allows dragging and dropping games into the application.
 - `--debug/-d`: Enter debug mode, allow gdb stub at port `1234`
 - `--config/-c`: Specify alternate configuration file.
 - `--fullscreen/-f`: Use fullscreen.

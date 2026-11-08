@@ -256,9 +256,17 @@ public:
     /// Waits until the back executed everything sent so far.
     void Drain(DrainSite site = DrainSite::Other);
 
-    /// Compute or copy work was just sent: what can write GPU-written command lists.
+    /// Compute or unknown-range copy work was just sent.
     void NoteWriter() {
         last_writer_position = write_position;
+        last_unknown_dma_writer_position = write_position;
+    }
+    /// Known-range MaxwellDMA pitch copy was sent (range recorded via NoteMemoryWrite).
+    void NoteRangedCopyWriter() {
+        last_writer_position = write_position;
+    }
+    [[nodiscard]] bool FunctionsSettled() const {
+        return last_function_position <= consumed_cache;
     }
     /// Waits until the back executed the compute and copy work sent so far (not what came after).
     /// Returns whether any of it was still queued.
@@ -282,7 +290,7 @@ public:
     }
     /// the last compute/copy and unranged writer positions.
     [[nodiscard]] u64 LastWriterPosition() const {
-        return last_writer_position;
+        return last_unknown_dma_writer_position;
     }
     [[nodiscard]] u64 LastUnrangedPosition() const {
         return last_unranged_position;
@@ -291,7 +299,7 @@ public:
     /// [begin, begin + size): compute or copies (any range), unranged writers, or a noted write
     /// that overlaps the range. Also true when more writes were noted since than are remembered.
     [[nodiscard]] bool MayBeWrittenSince(u64 since, u64 begin, u64 size) const {
-        if (last_writer_position > since || last_unranged_position > since) {
+        if (last_unknown_dma_writer_position > since || last_unranged_position > since) {
             return true;
         }
         if (last_memory_writer_position <= since) {
@@ -533,6 +541,7 @@ private:
     // Front side.
     u64 write_position{};
     u64 last_writer_position{};
+    u64 last_unknown_dma_writer_position{};
     u64 last_memory_writer_position{};
     u64 last_unranged_position{};
     static constexpr u32 PendingWriteWords = 8;

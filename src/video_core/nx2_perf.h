@@ -15,7 +15,7 @@
 
 // EXPERIMENT (not for nx2): GPU back-thread optimizations for Ocarina of Time.
 // split_overlap is quarantined. Frizti build: the options reviewed as exact rewrites are on by
-// default; those that change timing or reuse ideas reverted with zortos293/Lichii#161 (its
+// default; those that change timing or reuse ideas reverted with zxrafa/Eve#161 (its
 // slab of wrong geometry in Kokiri Forest) are off until EDEN_NX2_PERF_ON=<name>,... turns them
 // on: frames_ahead, clean_words, index_rebind, submit_budget, fence_flush, fragment_barrier,
 // front_sleep, async_pipelines, and bounds (this tree keeps its own range cache).
@@ -87,9 +87,7 @@ inline bool On(Opt opt) {
         // FramesAhead is on: with Ocarina's CPU readbacks preflushed it is worth ~1 fps (48.3 ->
         // 49.5 on the Kokiri porch) and it waits for this frame too whenever the GPU falls behind.
         const unsigned default_off = bit(Opt::CleanWords) |
-                                     bit(Opt::IndexRebind) | bit(Opt::SubmitBudget) |
                                      bit(Opt::FenceFlush) | bit(Opt::FragmentBarrier) |
-                                     bit(Opt::FrontSleep) | bit(Opt::AsyncPipelines) |
                                      bit(Opt::Bounds);
         unsigned mask = (default_off & ~names("EDEN_NX2_PERF_ON")) | names("EDEN_NX2_PERF_OFF");
         mask |= bit(Opt::SplitOverlap);

@@ -42,7 +42,7 @@ The program has 70 `ATOMG.E.ADD` instructions. In the IR, 65 of them add an imme
 is computed as `low < pointer_low` and is added to the high word. The other 5 add a
 thread-dependent 64-bit offset to the pointer at `c1[0x0]`; their carry is the add's
 carry flag. Both pointers are classified unmapped when the pipeline is built.
-[Lichii #47](https://github.com/zortos293/Lichii/pull/47) keeps the buffer only for a
+[Eve #47](https://github.com/zxrafa/Eve/pull/47) keeps the buffer only for a
 pointer that is the atomic's bare address, so neither form matches. Offline, mapping
 only `c0[0x40]` routes the 65; mapping only `c1[0x0]` routes the 5.
 

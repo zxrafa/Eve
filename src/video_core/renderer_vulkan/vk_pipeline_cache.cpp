@@ -23,6 +23,8 @@
 #include <cstring>
 #include <numeric>
 #include "common/cityhash.h"
+#include "common/memory_detect.h"
+#include "video_core/renderer_vulkan/nx2_pipeline_budget.h"
 #include "common/scope_exit.h"
 #include "common/fs/fs.h"
 #include "common/fs/path_util.h"
@@ -747,7 +749,7 @@ size_t BackgroundPipelineThreads() {
     if (const char* value = std::getenv("EDEN_NX2_BACKGROUND_PIPELINE_THREADS")) {
         return std::clamp<size_t>(static_cast<size_t>(std::strtoull(value, nullptr, 10)), 1, 16);
     }
-    return std::clamp<size_t>(std::thread::hardware_concurrency() / 4, 1, 6);
+    return Nx2PipelineBudget::ComputeBackgroundPrebuildThreads(std::thread::hardware_concurrency());
 }
 
 // EDEN_NX2_PRELOAD_ALL_PIPELINES=1 builds every cached pipeline at boot, as before.
@@ -1152,11 +1154,15 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
     // cannot read, and their loader deletes a file it fails to read. The shared files of earlier
     // builds are copied once.
     pipeline_cache_filename =
-        VideoCommon::VersionedPipelineCachePath(base_dir, "vulkan-frizti", CACHE_VERSION);
+        VideoCommon::VersionedPipelineCachePath(base_dir, "vulkan-eve", CACHE_VERSION);
     used_pipelines_filename =
-        VideoCommon::VersionedPipelineCachePath(base_dir, "vulkan_used-frizti", CACHE_VERSION);
+        VideoCommon::VersionedPipelineCachePath(base_dir, "vulkan_used-eve", CACHE_VERSION);
     for (const auto& [shared, own] :
-         {std::pair{VideoCommon::VersionedPipelineCachePath(base_dir, "vulkan", CACHE_VERSION),
+         {std::pair{VideoCommon::VersionedPipelineCachePath(base_dir, "vulkan-frizti", CACHE_VERSION),
+                    pipeline_cache_filename},
+          std::pair{VideoCommon::VersionedPipelineCachePath(base_dir, "vulkan_used-frizti", CACHE_VERSION),
+                    used_pipelines_filename},
+          std::pair{VideoCommon::VersionedPipelineCachePath(base_dir, "vulkan", CACHE_VERSION),
                     pipeline_cache_filename},
           std::pair{VideoCommon::VersionedPipelineCachePath(base_dir, "vulkan_used", CACHE_VERSION),
                     used_pipelines_filename}}) {
@@ -1168,7 +1174,7 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
                      error ? fmt::format(" (failed: {})", error.message()) : std::string{});
         }
     }
-    // zortos293/Lichii builds from #194 on (cache version 53) write the same records as this
+    // zxrafa/Eve builds from #194 on (cache version 53) write the same records as this
     // build under another version number: with no cache of this version, copy theirs and
     // relabel the copy. Their files stay as they are.
     if (std::error_code error; !std::filesystem::exists(pipeline_cache_filename, error)) {
@@ -1325,9 +1331,19 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
     workers.WaitForRequests(stop_loading);
 
     if (!deferred_graphics.empty() && !stop_loading.stop_requested()) {
+        const u64 host_ram = Common::GetMemInfo().TotalPhysicalMemory;
+        const size_t prebuild_cap = Nx2PipelineBudget::ComputeDeferredPrebuildCap(host_ram);
+        const size_t live_cap = Nx2PipelineBudget::ComputeLivePipelineCap(host_ram);
+        const bool driver_caches = DriverCachesPipelines(device);
+        if (deferred_graphics.size() > prebuild_cap) {
+            deferred_graphics.erase(
+                deferred_graphics.begin(),
+                deferred_graphics.end() - static_cast<std::ptrdiff_t>(prebuild_cap));
+        }
         const size_t threads = BackgroundPipelineThreads();
-        LOG_INFO(Render_Vulkan, "Building {} cached graphics pipelines in the background ({} threads)",
-                 deferred_graphics.size(), threads);
+        LOG_INFO(Render_Vulkan,
+                 "Building {} cached graphics pipelines in the background ({} threads, live cap {})",
+                 deferred_graphics.size(), threads, live_cap);
         background_left.store(deferred_graphics.size(), std::memory_order_relaxed);
         background_start = std::chrono::steady_clock::now();
         background_active.store(true, std::memory_order_release);
@@ -1337,11 +1353,13 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         // found, which the game is likelier to need soon than its oldest entries.
         for (auto& deferred : std::views::reverse(deferred_graphics)) {
             background_workers->QueueWork([this, key = deferred.first,
-                                           envs_ = std::move(deferred.second)]() mutable {
+                                           envs_ = std::move(deferred.second), live_cap,
+                                           driver_caches]() mutable {
                 bool build = !background_stop.load(std::memory_order_relaxed);
                 if (build) {
                     std::scoped_lock lock{background_mutex};
-                    build = !background_claimed.contains(key);
+                    build = !background_claimed.contains(key) &&
+                            (driver_caches || background_ready.size() < live_cap / 2);
                 }
                 std::unique_ptr<GraphicsPipeline> pipeline;
                 if (build) {
@@ -1352,8 +1370,11 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
                     }
                     pipeline = CreateGraphicsPipeline(pools, key, MakeSpan(env_ptrs), nullptr, false);
                 }
+                envs_.clear();
+                envs_.shrink_to_fit();
                 std::unique_lock lock{background_mutex};
-                if (pipeline && !background_claimed.contains(key)) {
+                if (pipeline && !background_claimed.contains(key) &&
+                    background_ready.size() < live_cap / 2) {
                     background_ready.emplace(key, std::move(pipeline));
                 }
                 if (background_left.fetch_sub(1, std::memory_order_acq_rel) == 1) {
@@ -1530,8 +1551,10 @@ void PipelineCache::EvictUnusedPipelines() {
     // pipelines are ~3.6 GB of driver memory at most. EDEN_NX2_PIPELINE_EVICT_ABOVE sets it.
     static const size_t evict_above = [] {
         const char* value = std::getenv("EDEN_NX2_PIPELINE_EVICT_ABOVE");
-        return value != nullptr ? static_cast<size_t>(std::strtoull(value, nullptr, 10))
-                                : size_t{8000};
+        return value != nullptr
+                   ? static_cast<size_t>(std::strtoull(value, nullptr, 10))
+                   : Nx2PipelineBudget::ComputeLivePipelineCap(
+                         Common::GetMemInfo().TotalPhysicalMemory);
     }();
     if (graphics_cache.size() <= evict_above) {
         return;

@@ -152,7 +152,9 @@ void GpuSplit::Stop() {
     ring.reset();
     write_position = 0;
     last_writer_position = 0;
+    last_unknown_dma_writer_position = 0;
     last_memory_writer_position = 0;
+    last_unranged_position = 0;
     pending_write_count = 0;
     async_writes.clear();
     last_sync_position = 0;

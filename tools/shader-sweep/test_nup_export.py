@@ -9,102 +9,20 @@ import subprocess
 import tempfile
 import unittest
 
+import os as _os, sys as _sys
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+if _HERE not in _sys.path:
+    _sys.path.insert(0, _HERE)
 
-COMPRESSED_SHADER = bytes.fromhex(
-    "28b52ffd8058c0912100f40000b073796e746865746963207368616465722062797465730100ceff339f4d"
-    "4c000008790100fcff3910024c000008650100fcff3910024c000008730100fcff3910024c000008740100"
-    "fcff3910024c0000086e0100fcff3910024c000008650100fcff3910024c000008200100fcff3910024c0000"
-    "08610100fcff3910024c000008630100fcff3910024c000008680100fcff3910024c000008730100fcff3910"
-    "024c000008790100fcff3910024c000008650100fcff3910024c000008730100fcff3910024c000008740100"
-    "fcff3910024d0000086e0100bc91391002"
-)
+from _mod.nup_fixtures import COMPRESSED_SHADER, fixture, snapshot
+from _mod.nup_cases import NupExtraCases
+
 EXECUTABLE = None
 WORK_DIR = None
 
 
-def fixture(filename='Shader.bfsha', corrupt=False):
-    payloads = [b'synthetic shader bytes' * 100000, b'not a candidate' * 200000, b'']
-    names = ['root', 'Shaders', filename, 'readme.txt', 'empty.bnsh']
-    pool = b''
-    strings = []
-    for name in names:
-        encoded = name.encode()
-        strings.append((len(pool), len(encoded)))
-        pool += encoded
-    packages = 3
-    dirs = 2
-    files = len(payloads)
-    children = [1, dirs + 1, dirs, dirs + 2]
-    toc_size = 0x30 + packages * 0x40 + dirs * 0x18 + files * 0x50 + len(children) * 4 + len(pool)
-    blob = (0x80 + toc_size + 15) & ~15
-    data = bytearray(blob)
-    def put(offset, value, width=8):
-        data[offset:offset+width] = value.to_bytes(width, 'little')
-    data[:4] = b'NUP\x01'
-    put(4, 0x80, 2)
-    put(8, 0x80)
-    put(16, toc_size)
-    put(0x38, blob)
-    put(0x48, packages, 4)
-    data[0x80:0x84] = b'TOC\x01'
-    put(0x84, packages, 4)
-    put(0x88, dirs)
-    put(0x90, files)
-    put(0x98, toc_size - len(pool))
-    put(0xa0, len(pool))
-    pos = 0xb0 + packages * 0x40
-    for i, (start, count) in enumerate([(0, 2), (2, 2)]):
-        off, size = strings[i]
-        put(pos, off, 4)
-        put(pos + 4, size, 4)
-        put(pos + 8, start, 4)
-        put(pos + 12, count, 4)
-        pos += 0x18
-    for i, payload in enumerate(payloads):
-        off, size = strings[i+2]
-        put(pos, off, 4)
-        put(pos + 4, size, 4)
-        put(pos + 8, len(payload))
-        encoded = (b'broken zstd' if corrupt else COMPRESSED_SHADER) if i == 0 else payload
-        if payload:
-            put(pos + 16, len(data))
-            put(pos + 24, len(encoded))
-            data += encoded
-            data += b'\x00' * (-len(data) % 16)
-        data[pos + 32:pos + 64] = hashlib.sha256(payload).digest()
-        put(pos + 64, int(i == 0), 1)
-        pos += 0x50
-    for child in children:
-        put(pos, child, 4)
-        pos += 4
-    data[pos:pos+len(pool)] = pool
-    for i in range(packages):
-        p = 0xb0 + i * 0x40
-        put(p, 0x0400000000000000 + i)
-        put(p + 12, 0xffffffff, 4)
-        put(p + 16, 0 if i < 2 else 0xffffffff, 4)
-        put(p + 20, i + 10, 4)
-        put(p + 24, i, 1)
-        metadata = b''
-        for kind, value in [(5, f'Synthetic package {i}'.encode()), (4, b'1.2.3')]:
-            metadata += struct.pack('<HHI', kind, 0, len(value)) + value
-        put(p + 32, len(data))
-        put(p + 40, len(metadata), 4)
-        data += metadata
-    put(0x40, len(data))
-    data[0x18:0x38] = hashlib.sha256(data[0x80:0x80+toc_size]).digest()
-    return bytes(data), payloads, 0x80 + toc_size + sum(8+len(f'Synthetic package {i}')+8+5 for i in range(packages))
 
-
-def snapshot(path):
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return path.stat().st_size, path.stat().st_mtime_ns, digest.hexdigest()
-
-
-class NupExportTests(unittest.TestCase):
+class NupExportTests(NupExtraCases, unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="nup-export-", dir=WORK_DIR)
         self.addCleanup(self.temporary.cleanup)
@@ -199,74 +117,6 @@ class NupExportTests(unittest.TestCase):
         self.run_export(success=False, output=link / "must-not-create")
         self.assertFalse((self.library / "must-not-create").exists())
 
-    def test_input_outside_library_is_rejected(self):
-        outside = self.root / "outside.nup"
-        outside.write_bytes(self.data)
-        self.run_export(success=False, source=outside)
-
-    def test_unsafe_member_names_are_rejected(self):
-        for index, name in enumerate([
-            "../escape.bfsha", "bad:stream.bfsha", "CON.bfsha", "back\\\\slash.bfsha",
-            "COM\u00b9.bfsha", "CONOUT$.bfsha",
-        ]):
-            with self.subTest(name=name):
-                source = self.library / f"unsafe-{index}.nup"
-                source.write_bytes(fixture(filename=name)[0])
-                manifest, output = self.run_export(success=False, source=source)
-                self.assertEqual(manifest["status"], "error")
-                self.assertFalse((output / "packages").exists())
-        self.assertFalse((self.root / "escape.bfsha").exists())
-
-    def test_unicode_name_is_preserved(self):
-        source = self.library / "unicode.nup"
-        source.write_bytes(fixture(filename="シェーダー.bfsha")[0])
-        _, output = self.run_export(["--path", "0:/Shaders/シェーダー.bfsha"], source=source)
-        self.assertEqual((output / "packages/0/romfs/Shaders/シェーダー.bfsha").read_bytes(),
-                         self.payloads[0])
-
-    def test_corrupt_zstd_is_not_read_by_catalog_but_fails_export(self):
-        source = self.library / "broken.nup"
-        source.write_bytes(fixture(corrupt=True)[0])
-        self.run_export(source=source)
-        manifest, output = self.run_export(
-            ["--path", "0:/Shaders/Shader.bfsha"], source=source, success=False)
-        self.assertEqual(manifest["status"], "error")
-        self.assertIn("decompression", manifest["error"])
-        self.assertFalse((output / "packages/0/romfs/Shaders/Shader.bfsha").exists())
-        self.assertEqual(list((output / "spill").iterdir()), [])
-
-    def test_corrupt_toc_is_rejected(self):
-        source = self.library / "bad-toc.nup"
-        data = bytearray(self.data)
-        data[0x18] ^= 1
-        source.write_bytes(data)
-        manifest, _ = self.run_export(source=source, success=False)
-        self.assertIn("parse failed", manifest["error"])
-
-    def test_metadata_allocation_limit(self):
-        source = self.library / "oversized-toc.nup"
-        header = bytearray(self.data[:0x80])
-        size = 256 * 1024 * 1024 + 1
-        blob = (0x80 + size + 15) & ~15
-        struct.pack_into("<Q", header, 0x10, size)
-        struct.pack_into("<Q", header, 0x38, blob)
-        struct.pack_into("<Q", header, 0x40, blob)
-        with source.open("wb") as stream:
-            stream.write(header)
-            stream.truncate(blob)
-        manifest, _ = self.run_export(source=source, success=False)
-        self.assertIn("metadata exceeds", manifest["error"])
-
-    def test_no_candidate_matches_is_not_empty_success(self):
-        source = self.library / "no-candidates.nup"
-        data = bytearray(fixture(filename="payload.data")[0])
-        toc_end = 0x80 + struct.unpack_from("<Q", data, 0x10)[0]
-        toc = data[0x80:toc_end].replace(b"Shaders", b"AssetsX").replace(b"empty.bnsh", b"empty.data")
-        data[0x80:toc_end] = toc
-        data[0x18:0x38] = hashlib.sha256(toc).digest()
-        source.write_bytes(data)
-        manifest, _ = self.run_export(["--candidates"], source=source, success=False)
-        self.assertIn("No files matched", manifest["error"])
 
 
 if __name__ == "__main__":

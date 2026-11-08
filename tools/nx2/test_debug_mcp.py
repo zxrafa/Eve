@@ -15,76 +15,17 @@ import unittest
 import debug_mcp
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PNG_BYTES = b"\x89PNG fake"
-PNG = base64.b64encode(PNG_BYTES).decode()
+
+import os as _os, sys as _sys
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+if _HERE not in _sys.path:
+    _sys.path.insert(0, _HERE)
+
+from _mod.fake_debug_emu import AdapterTestBase, FakeEmulator, PNG, PNG_BYTES
+from _mod.debug_mcp_cases_extra import AdapterExtraCases
 
 
-class FakeEmulator:
-    """The debug server's wire protocol: one JSON request line, one JSON response line."""
-
-    def __init__(self, capture_dir):
-        self.listener = socket.socket()
-        self.listener.bind(("127.0.0.1", 0))
-        self.listener.listen()
-        self.port = self.listener.getsockname()[1]
-        self.capture_dir = capture_dir
-        self.requests = []
-        threading.Thread(target=self.serve, daemon=True).start()
-
-    def answer(self, request):
-        method = request["method"]
-        if method == "status":
-            return {"result": {"title": "Test", "presents": 3}}
-        if method == "screenshot":
-            return {"result": {"width": 1280, "height": 720, "png_base64": PNG}}
-        if method == "capture_frame":
-            return {"result": {"directory": self.capture_dir, "entries_total": 1}}
-        if method == "read_memory":
-            return {"result": {"address": request["params"]["address"], "hex": "0000803f"}}
-        if method == "read_gpu_memory":
-            return {"error": "GPU address 0x5000 is not mapped"}
-        if method in ("input", "input_sequence"):
-            return {"result": {"controller": "player1", "frames": 3}}
-        return {"error": f"unknown method \"{method}\""}
-
-    def serve(self):
-        while True:
-            try:
-                connection, _ = self.listener.accept()
-            except OSError:
-                return
-            with connection, connection.makefile("rwb") as stream:
-                for line in stream:
-                    request = json.loads(line)
-                    self.requests.append(request)
-                    response = {"id": request["id"], **self.answer(request)}
-                    stream.write(json.dumps(response).encode() + b"\n")
-                    stream.flush()
-
-    def close(self):
-        self.listener.close()
-
-
-class AdapterTest(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.capture_dir = os.path.join(self.temp.name, "capture-1")
-        os.mkdir(self.capture_dir)
-        with open(os.path.join(self.capture_dir, "0001_present.png"), "wb") as file:
-            file.write(b"\x89PNG present")
-        self.fake = FakeEmulator(self.capture_dir)
-        self.adapter = debug_mcp.Adapter(debug_mcp.Emulator(f"127.0.0.1:{self.fake.port}"))
-
-    def tearDown(self):
-        self.adapter.emulator.close()
-        self.fake.close()
-        self.temp.cleanup()
-
-    def call(self, name, arguments=None):
-        reply = self.adapter.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                                     "params": {"name": name, "arguments": arguments or {}}})
-        return reply["result"]
-
+class AdapterTest(AdapterExtraCases, AdapterTestBase):
     def test_initialize_and_list(self):
         reply = self.adapter.handle({"jsonrpc": "2.0", "id": 0, "method": "initialize",
                                      "params": {"protocolVersion": "2025-03-26"}})
@@ -148,87 +89,6 @@ class AdapterTest(unittest.TestCase):
         escape = self.call("capture_image", {"directory": self.capture_dir, "name": "../../etc"})
         self.assertTrue(escape["isError"])
 
-    def test_restarted_emulator_is_reconnected(self):
-        self.call("status")
-        self.adapter.emulator.sock.close()
-        self.adapter.emulator.sock = socket.create_connection(("127.0.0.1", self.fake.port))
-        self.adapter.emulator.sock.close()
-        self.adapter.emulator.sock = None
-        self.assertFalse(self.call("status")["isError"])
-
-    def test_missing_emulator_explains_how_to_start_it(self):
-        self.fake.close()
-        probe = socket.socket()
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-        probe.close()
-        adapter = debug_mcp.Adapter(debug_mcp.Emulator(f"127.0.0.1:{port}"))
-        reply = adapter.handle({"id": 1, "method": "tools/call",
-                                "params": {"name": "status", "arguments": {}}})
-        self.assertTrue(reply["result"]["isError"])
-        self.assertIn("EDEN_NX2_DEBUG_SERVER", reply["result"]["content"][0]["text"])
-
-    def test_stdio_framing(self):
-        stdin = io.StringIO('{"jsonrpc":"2.0","id":1,"method":"ping"}\n\nnot json\n')
-        stdout = io.StringIO()
-        debug_mcp.serve(self.adapter, stdin, stdout)
-        lines = [json.loads(line) for line in stdout.getvalue().splitlines()]
-        self.assertEqual(lines[0], {"jsonrpc": "2.0", "id": 1, "result": {}})
-        self.assertEqual(lines[1]["error"]["code"], -32700)
-
-    def test_runs_as_a_process(self):
-        done = subprocess.run([sys.executable, "-I", os.path.join(HERE, "debug_mcp.py"),
-                               "--server", f"127.0.0.1:{self.fake.port}"],
-                              input='{"jsonrpc":"2.0","id":5,"method":"tools/call","params":'
-                                    '{"name":"status","arguments":{}}}\n',
-                              capture_output=True, text=True, timeout=30)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        reply = json.loads(done.stdout)
-        self.assertEqual(reply["id"], 5)
-        self.assertFalse(reply["result"]["isError"])
-
-
-    def test_call_once_saves_the_screenshot(self):
-        out = os.path.join(self.temp.name, "shot.png")
-        stdout = io.StringIO()
-        code = debug_mcp.call_once(self.adapter, '{"method":"screenshot","params":{"height":360}}',
-                                   out, stdout)
-        self.assertEqual(code, 0)
-        result = json.loads(stdout.getvalue())
-        self.assertEqual(result["width"], 1280)
-        self.assertNotIn("png_base64", result)
-        self.assertEqual(result["png"], os.path.abspath(out).replace("\\", "/"))
-        with open(out, "rb") as file:
-            self.assertEqual(file.read(), PNG_BYTES)
-        self.assertEqual(self.fake.requests[-1]["params"], {"height": 360})
-
-    def test_call_once_without_out_says_where_the_png_went(self):
-        stdout = io.StringIO()
-        self.assertEqual(debug_mcp.call_once(self.adapter, '{"method":"screenshot"}', None, stdout), 0)
-        self.assertIn("--out", json.loads(stdout.getvalue())["png"])
-
-    def test_call_once_reports_errors_as_json(self):
-        for request in ('{"method":"log_filter","params":{"filter":"*:Debug"}}', '{"params":{}}',
-                        'not json', '{"method":"bogus"}', '[1]'):
-            stdout = io.StringIO()
-            self.assertEqual(debug_mcp.call_once(self.adapter, request, None, stdout), 1, request)
-            self.assertIn("error", json.loads(stdout.getvalue()), request)
-
-    def test_call_runs_from_the_command_line(self):
-        out = os.path.join(self.temp.name, "cli.png")
-        script = os.path.join(HERE, "debug_mcp.py")
-        server = f"127.0.0.1:{self.fake.port}"
-        done = subprocess.run([sys.executable, "-I", script, "--server", server, "--call",
-                               '{"method":"screenshot"}', "--out", out],
-                              capture_output=True, text=True, timeout=30)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(json.loads(done.stdout)["height"], 720)
-        self.assertTrue(os.path.isfile(out))
-        failed = subprocess.run([sys.executable, "-I", script, "--server", server, "--call",
-                                 '{"method":"log_filter","params":{"filter":"x"}}'],
-                                capture_output=True, text=True, timeout=30)
-        self.assertEqual(failed.returncode, 1)
-        self.assertIn("unknown method", json.loads(failed.stdout)["error"])
 
 
 if __name__ == "__main__":

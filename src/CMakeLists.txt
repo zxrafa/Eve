@@ -147,9 +147,9 @@ if (MSVC AND NOT CXX_CLANG)
     endif()
 
     set(CMAKE_EXE_LINKER_FLAGS_DEBUG   "/DEBUG /MANIFEST:NO" CACHE STRING "" FORCE)
-    # LICHII_LINK_ICF=OFF keeps identical functions apart, so sampling profiles name them right.
-    option(LICHII_LINK_ICF "Fold identical functions when linking Release builds (MSVC)" ON)
-    if (LICHII_LINK_ICF)
+    # EVE_LINK_ICF=OFF keeps identical functions apart, so sampling profiles name them right.
+    option(EVE_LINK_ICF "Fold identical functions when linking Release builds (MSVC)" ON)
+    if (EVE_LINK_ICF)
         set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/DEBUG /MANIFEST:NO /INCREMENTAL:NO /OPT:REF,ICF" CACHE STRING "" FORCE)
     else()
         set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/DEBUG /MANIFEST:NO /INCREMENTAL:NO /OPT:REF,NOICF" CACHE STRING "" FORCE)
@@ -293,7 +293,7 @@ endif()
 
 if (YUZU_CMD)
     add_subdirectory(yuzu_cmd)
-    set_target_properties(yuzu-cmd PROPERTIES OUTPUT_NAME "eden-cli")
+    set_target_properties(yuzu-cmd PROPERTIES OUTPUT_NAME "eve-cli")
 endif()
 
 if (ENABLE_QT)

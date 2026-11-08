@@ -24,7 +24,7 @@ zero-filled padding; replace only zero instructions with NOP in a scratch copy
 when disassembling it, without changing the source used to calculate the key.
 
 Upstream `401dfb9329` recognizes this family by resource slots rather than title.
-Lichii deliberately retained the stricter Fire Emblem title/fingerprint gate when
+Eve deliberately retained the stricter Fire Emblem title/fingerprint gate when
 merging it. That gate excludes Star Fox despite the matching captured accesses.
 This change extends the strict recognition instead of reinstating the generic
 heuristic. It reuses the spatial de-jitter path from `b9d6b4a71e`; motion-vector

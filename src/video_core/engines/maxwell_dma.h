@@ -76,6 +76,10 @@ struct BufferOperand {
 } // namespace DMA
 } // namespace Tegra
 
+namespace VideoCommon {
+class GpuSplit;
+}
+
 namespace Tegra::Engines {
 
 class AccelerateDMAInterface {
@@ -250,6 +254,9 @@ public:
     /// Write multiple values to the register identified by method.
     void CallMultiMethod(Core::System& system, u32 method, const u32* base_start, u32 amount, u32 methods_pending) override;
 
+    /// Mirrors MaxwellDMA state on the split front thread to record exact pitch copy ranges.
+    void FrontRecordMethod(VideoCommon::GpuSplit& split, u32 method, u32 argument);
+
 private:
     /// Performs the copy from the source buffer to the destination buffer as configured in the
     /// registers.
@@ -306,7 +313,7 @@ private:
             };
             std::array<u32, NUM_REGS> reg_array;
         };
-    } regs{};
+    } regs{}, front_regs{};
     static_assert(sizeof(Regs) == NUM_REGS * 4);
 
 #define ASSERT_REG_POSITION(field_name, position)                                                  \
