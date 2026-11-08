@@ -70,6 +70,7 @@ jobs:
     name: ${{ matrix.platform }} binary
     needs: prepare-release
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 3000M
